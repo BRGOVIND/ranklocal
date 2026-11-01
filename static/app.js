@@ -276,3 +276,37 @@ $('clipList').addEventListener('change',e=>{
   renderRows();
 });
 $('clipList').addEventListener('input',e=>{if(e.target.dataset.field==='label'){const i=Number(e.target.closest('.clip-row').dataset.index);project.clips[i].label=e.target.value;save();syncText();}});
+let dragging=null;
+$('clipList').addEventListener('dragstart',e=>{const row=e.target.closest('.clip-row');if(row) dragging=Number(row.dataset.index);});
+$('clipList').addEventListener('dragover',e=>{if(e.target.closest('.clip-row'))e.preventDefault();});
+$('clipList').addEventListener('drop',e=>{const row=e.target.closest('.clip-row');if(!row||dragging===null)return;e.preventDefault();const to=Number(row.dataset.index);const [item]=project.clips.splice(dragging,1);project.clips.splice(to,0,item);project.ranksLocked=true;dragging=null;select(to);});
+$('shuffleBtn').onclick=()=>{
+  if(exporting||project.clips.length<2)return;
+  const before=project.clips.map(c=>c.id).join('|');
+  for(let attempt=0;attempt<5;attempt++){
+    for(let i=project.clips.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[project.clips[i],project.clips[j]]=[project.clips[j],project.clips[i]];}
+    if(project.clips.map(c=>c.id).join('|')!==before)break;
+  }
+  if(project.clips.map(c=>c.id).join('|')===before) [project.clips[0],project.clips[1]]=[project.clips[1],project.clips[0]];
+  project.ranksLocked=true;
+  select(0);
+};
+
+$('exportBtn').onclick=async()=>{
+  if(exporting||!project.clips.length)return;
+  exporting=true;syncText();$('exportStatus').textContent='Starting export…';
+  try{
+    const response=await fetch('/api/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(project)});
+    const data=await response.json();if(!response.ok)throw Error(data.error||'Export failed');
+    const poll=async()=>{
+      const result=await fetch(`/api/jobs/${data.job}`).then(r=>r.json());
+      if(result.status==='working'){$('exportStatus').textContent=`Rendering ${result.progress}%`;setTimeout(poll,1000);return;}
+      exporting=false;syncText();
+      if(result.status==='error'){$('exportStatus').textContent=result.error;return;}
+      $('exportStatus').innerHTML=`<a href="${result.url}" download>Download MP4 ↓</a>`;
+    };await poll();
+  }catch(error){exporting=false;syncText();$('exportStatus').textContent=error.message;}
+};
+renderRows();
+if(project.clips.length) loadSelected();
+if(restoredOldImports) $('uploadStatus').textContent=`Restored ${restoredOldImports} earlier clips to full length. You can trim them manually.`;
