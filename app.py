@@ -238,3 +238,78 @@ def validate_project(project):
             raise ValueError("Audio volume must be 0–100%")
 
 
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        pass
+
+    def json_reply(self, code, payload):
+        body = json.dumps(payload).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def file_reply(self, path, media=False):
+        if not path.is_file():
+            self.send_error(404)
+            return
+        size = path.stat().st_size
+        start, end = 0, size - 1
+        partial = False
+        match = re.fullmatch(r"bytes=(\d*)-(\d*)", self.headers.get("Range", ""))
+        if media and match:
+            start = int(match[1]) if match[1] else 0
+            end = min(int(match[2]), end) if match[2] else end
+            if start > end or start >= size:
+                self.send_error(416)
+                return
+            partial = True
+        self.send_response(206 if partial else 200)
+        self.send_header("Content-Type", mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        if partial:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        with path.open("rb") as stream:
+            stream.seek(start)
+            remaining = end - start + 1
+            while remaining:
+                chunk = stream.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                remaining -= len(chunk)
+
+    def do_GET(self):
+        path = unquote(urlparse(self.path).path)
+        if path == "/api/health":
+            return self.json_reply(200, {"ok": True, "ffmpeg": FFMPEG})
+        if path.startswith("/api/jobs/"):
+            with LOCK:
+                job = JOBS.get(path.removeprefix("/api/jobs/"))
+                return self.json_reply(200 if job else 404, job or {"error": "Job not found"})
+        if path.startswith("/media/"):
+            name = path.removeprefix("/media/")
+            if valid_media_name(name):
+                return self.file_reply(UPLOADS / name, media=True)
+        if path.startswith("/previews/"):
+            name = path.removeprefix("/previews/")
+            if re.fullmatch(r"[a-f0-9]{32}\.mp4", name):
+                return self.file_reply(PREVIEWS / name, media=True)
+        if path.startswith("/audio/"):
+            name = path.removeprefix("/audio/")
+            if valid_audio_name(name):
+                return self.file_reply(AUDIO / name, media=True)
+        if path.startswith("/exports/"):
+            name = path.removeprefix("/exports/")
+            if re.fullmatch(r"ranklocal-[a-zA-Z0-9-]+\.mp4", name):
+                return self.file_reply(EXPORTS / name, media=True)
+        if path == "/":
+            path = "/index.html"
+        name = path.lstrip("/")
+        if name in {"index.html", "style.css", "app.js"}:
+            return self.file_reply(STATIC / name)
+        self.send_error(404)
+
