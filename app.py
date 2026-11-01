@@ -144,3 +144,67 @@ def run_ffmpeg(args):
         raise RuntimeError(result.stderr.strip()[-1200:] or "FFmpeg failed")
 
 
+def render(job_id, project):
+    work = EXPORTS / job_id
+    work.mkdir()
+    try:
+        clips = project["clips"]
+        parts = []
+        for index, clip in enumerate(clips):
+            source = UPLOADS / clip["id"]
+            overlay = work / f"overlay-{index}.png"
+            part = work / f"part-{index}.mp4"
+            make_overlay(project, index, overlay)
+            start = float(clip["start"])
+            duration = float(clip["end"]) - start
+            visual = (
+                "[0:v]fps=30,split=2[bg0][fg0];"
+                "[bg0]scale=540:960:force_original_aspect_ratio=increase,"
+                "crop=540:960,boxblur=12:1,scale=1080:1920[bg];"
+                "[fg0]scale=1080:1120:force_original_aspect_ratio=increase,"
+                "crop=1080:1120[fg];"
+                "[bg][fg]overlay=0:400[base];"
+                "[base][1:v]overlay=0:0:shortest=1,setsar=1[v]"
+            )
+            keep_clip_sound = not clip.get("muted", not project.get("audio", True))
+            audio_map = "0:a:0" if keep_clip_sound and has_audio(source) else "2:a:0"
+            args = ["-ss", str(start), "-t", str(duration), "-i", str(source),
+                    "-loop", "1", "-i", str(overlay),
+                    "-f", "lavfi", "-t", str(duration), "-i", "anullsrc=r=48000:cl=stereo",
+                    "-filter_complex", visual, "-map", "[v]", "-map", audio_map,
+                    "-t", str(duration), "-r", "30", "-c:v", "libx264",
+                    "-preset", "veryfast", "-crf", "22", "-pix_fmt", "yuv420p",
+                    "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
+                    "-movflags", "+faststart", str(part)]
+            run_ffmpeg(args)
+            parts.append(part)
+            with LOCK:
+                JOBS[job_id]["progress"] = round((index + 1) / (len(clips) + 1) * 100)
+        listing = work / "list.txt"
+        listing.write_text("".join(f"file '{part.as_posix()}'\n" for part in parts), encoding="utf-8")
+        music = project.get("music")
+        output = EXPORTS / f"ranklocal-{datetime.now():%Y%m%d-%H%M%S}-{job_id[:6]}.mp4"
+        joined = work / "joined.mp4" if music else output
+        run_ffmpeg(["-f", "concat", "-safe", "0", "-i", str(listing),
+                    "-c", "copy", "-movflags", "+faststart", str(joined)])
+        if music:
+            volume = float(music["volume"])
+            total = sum(float(c["end"]) - float(c["start"]) for c in clips)
+            mix = (f"[1:a]volume={volume}[music];"
+                   "[0:a][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+                   "alimiter=limit=0.95[a]")
+            run_ffmpeg(["-i", str(joined), "-stream_loop", "-1", "-i", str(AUDIO / music["id"]),
+                        "-filter_complex", mix, "-map", "0:v", "-map", "[a]", "-t", str(total),
+                        "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                        "-movflags", "+faststart", str(output)])
+        with LOCK:
+            JOBS[job_id].update(status="done", progress=100, url=f"/exports/{output.name}")
+    except Exception as exc:
+        with LOCK:
+            JOBS[job_id].update(status="error", error=str(exc))
+    finally:
+        for item in work.glob("*"):
+            item.unlink(missing_ok=True)
+        work.rmdir()
+
+
