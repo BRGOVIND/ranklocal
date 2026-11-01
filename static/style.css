@@ -34,3 +34,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visi
 button{transition:background .18s,border-color .18s,transform .18s}
 button:active{transform:translateY(1px)}
 @media(max-width:950px){.layout{grid-template-columns:1fr;gap:10px}.splitter{display:none}.editor,.preview-panel{max-height:none;overflow:visible}}
+.settings{display:block}
+.settings p{line-height:1.5;margin:8px 0 13px;max-width:54ch}
+.audio-toggle{border:1px solid #4a414b;background:#2b252d;color:#ece5ec;border-radius:7px;padding:5px 8px;font-size:10px;font-weight:700;white-space:nowrap}
+.audio-toggle.muted{color:#aea5af;background:#211f25}
+.audio-toggle:hover{border-color:#ff527d}
+.audio-upload{display:inline-flex;align-items:center;justify-content:center;border:1px dashed #766372;background:#211b23;color:#fff;border-radius:9px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer}
+.audio-upload:hover{border-color:#ff527d;background:#2d2029}
+.music-controls{margin-top:12px;padding:12px;border:1px solid #3a3340;border-radius:10px;background:#1c1920}
+.music-controls[hidden]{display:none}
+.music-head{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.music-head strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.music-volume{display:block;margin-top:12px;color:#c6bdc9;font-size:11px;font-weight:700}
+.music-volume span{float:right;font-variant-numeric:tabular-nums;color:#ff779a}
+.music-volume input{display:block;width:100%;margin:9px 0 5px;accent-color:#ff527d}
+.music-controls small{display:block;color:#918896;line-height:1.4}
