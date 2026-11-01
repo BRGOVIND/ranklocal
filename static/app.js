@@ -60,3 +60,120 @@ function syncText() {
   $('shuffleBtn').disabled=n<2||exporting;
   $('playOrder').textContent=n?`Playback: ${project.clips.map(c=>`#${c.rank}`).join('  →  ')}`:'';
 }
+function renderRows() {
+  const n=project.clips.length;
+  $('clipList').innerHTML = project.clips.map((c,i)=>`<div class="clip-row ${i===selected?'selected':''}" draggable="true" data-index="${i}">
+    <div class="clip-top"><span class="rank-pill">#${c.rank}</span><span class="play-index">PLAY ${String(i+1).padStart(2,'0')}</span><span class="clip-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span><span class="duration">${formatTime(Number(c.end)-Number(c.start))}</span><button class="audio-toggle ${c.muted?'muted':''}" data-action="mute" title="${c.muted?'Turn on clip sound':'Mute this clip'}">${c.muted?'Muted':'Sound on'}</button><button class="row-btn" data-action="up" title="Move earlier">↑</button><button class="row-btn" data-action="down" title="Move later">↓</button><button class="row-btn" data-action="remove" title="Remove">×</button></div>
+    <div class="clip-fields"><label>Rank label<input data-field="label" maxlength="46" value="${escapeHtml(c.label)}" placeholder="Moment ${n-i}"></label>
+      <details class="manual-trim" ${openTrimId===c.id?'open':''}><summary>Trim manually · ${Number(c.start)===0 && Math.abs(Number(c.end)-Number(c.duration))<.1?'full clip':`${Number(c.start).toFixed(1)}–${Number(c.end).toFixed(1)}s`}</summary>
+        <div class="trim-controls"><label>Start (s)<input data-field="start" type="number" min="0" max="${c.duration}" step="0.1" value="${c.start}"></label><label>End (s)<input data-field="end" type="number" min="0.1" max="${c.duration}" step="0.1" value="${c.end}"></label></div><p class="trim-note">Nothing cut automatically. Change these only if you want.</p>
+      </details></div>
+  </div>`).join('');
+  syncText();
+  save();
+}
+async function preparePreview(c, play) {
+  $('uploadStatus').textContent = `Preparing preview for ${c.name}…`;
+  try {
+    const response = await fetch('/api/preview', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:c.id})});
+    const data = await response.json();
+    if(!response.ok) throw Error(data.error || 'Preview conversion failed');
+    c.preview = data.url;
+    save();
+    $('uploadStatus').textContent = '';
+    if(project.clips[selected]?.id === c.id) loadSelected(play);
+  } catch(error) { $('uploadStatus').textContent = error.message; }
+}
+function loadSelected(play=false) {
+  const c=project.clips[selected];
+  if(!c) { main.removeAttribute('src'); bg.removeAttribute('src'); syncText(); return; }
+  if(!c.preview && !/\.(mp4|webm)$/i.test(c.id)) { preparePreview(c,play); return; }
+  main.src=bg.src=c.preview || `/media/${encodeURIComponent(c.id)}`;
+  main.onerror=()=>{ if(!c.preview) preparePreview(c,play); else $('uploadStatus').textContent=`Preview unavailable for ${c.name}`; };
+  main.onloadedmetadata=()=>{
+    const start=Math.min(Number(c.start),main.duration || Number(c.start));
+    const ready=()=>{ bg.currentTime=main.currentTime; if(play) startPlayback(); syncText(); };
+    if(Math.abs(main.currentTime-start)>.05){main.onseeked=()=>{main.onseeked=null;ready();};main.currentTime=start;}
+    else ready();
+  };
+  syncText();
+}
+function select(index, play=false, continuous=false) {
+  selected=Math.max(0,Math.min(index,project.clips.length-1));
+  main.pause(); bg.pause(); playing=false;
+  if(!continuous) musicAudio.pause();
+  $('playBtn').textContent='▶';
+  renderRows(); loadSelected(play);
+}
+function startPlayback() {
+  if(!project.clips.length) return;
+  playing=true;
+  main.muted=!!project.clips[selected].muted;
+  main.play().catch(()=>{playing=false; $('playBtn').textContent='▶';});
+  bg.play().catch(()=>{});
+  if(project.music){
+    musicAudio.volume=Number(project.music.volume);
+    if(musicAudio.paused){
+      if(Number.isFinite(musicAudio.duration) && musicAudio.duration>0) musicAudio.currentTime=currentTime()%musicAudio.duration;
+      musicAudio.play().catch(()=>{$('audioStatus').textContent='Audio preview unavailable. Export can still use this file.';});
+    }
+  }
+  $('playBtn').textContent='Ⅱ';
+}
+function stopPlayback() { playing=false; main.pause(); bg.pause(); musicAudio.pause(); $('playBtn').textContent='▶'; }
+main.addEventListener('timeupdate',()=>{
+  const c=project.clips[selected]; if(!c) return;
+  if(Math.abs(bg.currentTime-main.currentTime)>.3) bg.currentTime=main.currentTime;
+  $('timeInfo').textContent=`${formatTime(currentTime())} / ${formatTime(totalTime())}`;
+  if(playing && main.currentTime>=Number(c.end)-.04) {
+    if(selected<project.clips.length-1) select(selected+1,true,true); else {stopPlayback(); main.currentTime=Number(c.start);}
+  }
+});
+$('playBtn').onclick=()=>playing?stopPlayback():startPlayback();
+$('titleInput').value=project.title;
+$('accentInput').value=project.accent;
+for(const [field,id] of [['title','titleInput'],['accent','accentInput']]) $(id).addEventListener('input',e=>{project[field]=e.target.value; save(); syncText();});
+for(const [field,id] of [['titleFont','fontInput'],['titleColor','titleColorInput'],['accentColor','accentColorInput'],['titleSize','titleSizeInput']]) {
+  $(id).value=project[field];
+  const update=e=>{project[field]=field==='titleSize'?Number(e.target.value):e.target.value;save();syncText();};
+  $(id).addEventListener('input',update);
+  $(id).addEventListener('change',update);
+}
+function syncMusic(){
+  const music=project.music;
+  $('musicControls').hidden=!music;
+  $('musicName').textContent=music?.name || '';
+  $('musicVolumeInput').value=music?Math.round(Number(music.volume)*100):30;
+  $('musicVolumeValue').textContent=`${$('musicVolumeInput').value}%`;
+  musicAudio.volume=music?Number(music.volume):.3;
+  const source=music?`/audio/${encodeURIComponent(music.id)}`:'';
+  if(musicAudio.getAttribute('src')!==source){musicAudio.pause();if(source)musicAudio.src=source;else musicAudio.removeAttribute('src');}
+}
+syncMusic();
+$('audioFileInput').addEventListener('change',async e=>{
+  const file=e.target.files[0];if(!file)return;
+  $('audioStatus').textContent=`Adding ${file.name}…`;
+  try{
+    const response=await fetch('/api/upload-audio',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file});
+    const data=await response.json();if(!response.ok)throw Error(data.error||'Audio upload failed');
+    const old=project.music;
+    project.music={id:data.id,name:file.name,volume:old?.volume ?? .3};
+    syncMusic();save();$('audioStatus').textContent=`Added ${file.name}`;
+    if(old)fetch(`/api/audio/${encodeURIComponent(old.id)}`,{method:'DELETE'}).catch(()=>{});
+  }catch(error){$('audioStatus').textContent=error.message;}
+  e.target.value='';
+});
+$('musicVolumeInput').addEventListener('input',e=>{
+  if(!project.music)return;
+  project.music.volume=Number(e.target.value)/100;
+  musicAudio.volume=project.music.volume;
+  $('musicVolumeValue').textContent=`${e.target.value}%`;
+  save();
+});
+$('removeMusicBtn').onclick=()=>{
+  if(exporting||!project.music)return;
+  const old=project.music;project.music=null;syncMusic();save();
+  $('audioStatus').textContent='Audio removed.';
+  fetch(`/api/audio/${encodeURIComponent(old.id)}`,{method:'DELETE'}).catch(()=>{});
+};
+new ResizeObserver(syncTitleStyle).observe($('preview'));
