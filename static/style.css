@@ -49,3 +49,9 @@ button:active{transform:translateY(1px)}
 .music-volume span{float:right;font-variant-numeric:tabular-nums;color:#ff779a}
 .music-volume input{display:block;width:100%;margin:9px 0 5px;accent-color:#ff527d}
 .music-controls small{display:block;color:#918896;line-height:1.4}
+.section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.section-heading>div{min-width:0}
+.shuffle-btn{flex:none;margin-top:18px;border:1px solid #814b61;background:#38232e;color:#ffe7ef;border-radius:8px;padding:8px 10px;font-size:11px;font-weight:800}
+.shuffle-btn:hover:not(:disabled){border-color:#ff7597;background:#533040}
+.order-line{font-size:11px;color:#ff8da9;margin-top:6px;font-variant-numeric:tabular-nums}
+.play-index{font-size:10px;color:#938b9a;font-variant-numeric:tabular-nums;white-space:nowrap}
