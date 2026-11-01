@@ -313,3 +313,101 @@ class Handler(BaseHTTPRequestHandler):
             return self.file_reply(STATIC / name)
         self.send_error(404)
 
+    def do_POST(self):
+        path = urlparse(self.path).path
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if path == "/api/upload":
+                suffix = Path(self.headers.get("X-Filename", "")).suffix.lower()
+                if suffix not in EXTENSIONS or not 0 < length <= MAX_UPLOAD:
+                    raise ValueError("Choose MP4, MOV, WebM, M4V or MKV under 2 GB")
+                name = uuid.uuid4().hex + suffix
+                target = UPLOADS / name
+                with target.open("wb") as stream:
+                    remaining = length
+                    while remaining:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            raise ValueError("Upload interrupted")
+                        stream.write(chunk)
+                        remaining -= len(chunk)
+                try:
+                    duration = probe_duration(target)
+                except ValueError:
+                    target.unlink(missing_ok=True)
+                    raise
+                return self.json_reply(200, {"id": name, "url": f"/media/{name}", "duration": duration})
+            if path == "/api/upload-audio":
+                suffix = Path(self.headers.get("X-Filename", "")).suffix.lower()
+                if suffix not in AUDIO_EXTENSIONS or not 0 < length <= 200 * 1024 * 1024:
+                    raise ValueError("Choose MP3, WAV, M4A, AAC, OGG or FLAC under 200 MB")
+                name = uuid.uuid4().hex + suffix
+                target = AUDIO / name
+                with target.open("wb") as stream:
+                    remaining = length
+                    while remaining:
+                        chunk = self.rfile.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            target.unlink(missing_ok=True)
+                            raise ValueError("Audio upload interrupted")
+                        stream.write(chunk)
+                        remaining -= len(chunk)
+                if not has_audio(target):
+                    target.unlink(missing_ok=True)
+                    raise ValueError("File has no readable audio")
+                return self.json_reply(200, {"id": name, "url": f"/audio/{name}"})
+            if path == "/api/preview":
+                if not 0 < length < 1000:
+                    raise ValueError("Invalid clip")
+                name = json.loads(self.rfile.read(length)).get("id", "")
+                if not valid_media_name(name) or not (UPLOADS / name).is_file():
+                    raise ValueError("Clip missing")
+                target = PREVIEWS / (Path(name).stem + ".mp4")
+                if not target.is_file():
+                    run_ffmpeg(["-i", str(UPLOADS / name), "-vf", "scale=640:-2",
+                                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k",
+                                "-movflags", "+faststart", str(target)])
+                return self.json_reply(200, {"url": f"/previews/{target.name}"})
+            if path == "/api/export":
+                if not 0 < length < 100_000:
+                    raise ValueError("Invalid project")
+                project = json.loads(self.rfile.read(length))
+                validate_project(project)
+                job_id = uuid.uuid4().hex
+                with LOCK:
+                    JOBS[job_id] = {"status": "working", "progress": 0}
+                threading.Thread(target=render, args=(job_id, project), daemon=True).start()
+                return self.json_reply(200, {"job": job_id})
+            self.send_error(404)
+        except (ValueError, KeyError, TypeError, RuntimeError, json.JSONDecodeError) as exc:
+            self.json_reply(400, {"error": str(exc)})
+
+    def do_DELETE(self):
+        path = urlparse(self.path).path
+        if path.startswith("/api/audio/"):
+            name = path.removeprefix("/api/audio/")
+            if not valid_audio_name(name):
+                return self.json_reply(400, {"error": "Invalid audio"})
+            (AUDIO / name).unlink(missing_ok=True)
+            return self.json_reply(200, {"ok": True})
+        if not path.startswith("/api/media/"):
+            self.send_error(404)
+            return
+        name = path.removeprefix("/api/media/")
+        if not valid_media_name(name):
+            return self.json_reply(400, {"error": "Invalid clip"})
+        (UPLOADS / name).unlink(missing_ok=True)
+        (PREVIEWS / (Path(name).stem + ".mp4")).unlink(missing_ok=True)
+        self.json_reply(200, {"ok": True})
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("RANKLOCAL_PORT", "8765"))
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    print(f"RankLocal running at http://127.0.0.1:{port}", flush=True)
+    threading.Timer(1, lambda: open_browser(f"http://127.0.0.1:{port}")).start()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
