@@ -177,3 +177,102 @@ $('removeMusicBtn').onclick=()=>{
   fetch(`/api/audio/${encodeURIComponent(old.id)}`,{method:'DELETE'}).catch(()=>{});
 };
 new ResizeObserver(syncTitleStyle).observe($('preview'));
+const layout=document.querySelector('.layout');
+const splitter=$('splitter');
+function setSplit(share) {
+  const value=Math.max(.35,Math.min(.65,Number(share)||.5));
+  layout.style.setProperty('--editor-share',`${value*2}fr`);
+  layout.style.setProperty('--preview-share',`${(1-value)*2}fr`);
+  splitter.setAttribute('aria-valuenow',String(Math.round(value*100)));
+  localStorage.setItem('ranklocal-split',String(value));
+}
+setSplit(localStorage.getItem('ranklocal-split')||.5);
+splitter.addEventListener('pointerdown',e=>{
+  splitter.setPointerCapture(e.pointerId);
+  splitter.classList.add('dragging');
+});
+splitter.addEventListener('pointermove',e=>{
+  if(!splitter.hasPointerCapture(e.pointerId)) return;
+  const bounds=layout.getBoundingClientRect();
+  setSplit((e.clientX-bounds.left)/bounds.width);
+});
+splitter.addEventListener('pointerup',e=>{splitter.releasePointerCapture(e.pointerId);splitter.classList.remove('dragging');});
+splitter.addEventListener('keydown',e=>{
+  if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
+  e.preventDefault();
+  setSplit(Number(localStorage.getItem('ranklocal-split')||.5)+(e.key==='ArrowRight'?.05:-.05));
+});
+$('newBtn').onclick=async()=>{
+  if(exporting) return;
+  if(!project.clips.length&&!project.music) return;
+  if(!confirm('Start a new video? Current clips and audio file will be removed. Exported MP4 files stay on your PC.')) return;
+  stopPlayback();
+  const old=project.clips.splice(0);
+  project.ranksLocked=false;
+  const oldMusic=project.music;project.music=null;syncMusic();
+  selected=0;renderRows();loadSelected();
+  $('exportStatus').textContent='';$('uploadStatus').textContent='Ready for new clips.';
+  await Promise.allSettled(old.map(c=>fetch(`/api/media/${encodeURIComponent(c.id)}`,{method:'DELETE'})));
+  if(oldMusic) await fetch(`/api/audio/${encodeURIComponent(oldMusic.id)}`,{method:'DELETE'}).catch(()=>{});
+};
+
+async function addFiles(files) {
+  for(const file of files) {
+    if(project.clips.length>=8) { $('uploadStatus').textContent='Maximum 8 clips.'; break; }
+    if(!/\.(mp4|mov|webm|m4v|mkv)$/i.test(file.name)) { $('uploadStatus').textContent=`Unsupported file: ${file.name}`; continue; }
+    $('uploadStatus').textContent=`Uploading ${file.name}…`;
+    try {
+      const response=await fetch('/api/upload',{method:'POST',headers:{'X-Filename':encodeURIComponent(file.name)},body:file});
+      const data=await response.json(); if(!response.ok) throw Error(data.error || 'Upload failed');
+      const duration=Number(data.duration);
+      if(!Number.isFinite(duration) || duration<=0) throw Error('Could not read clip duration');
+      project.clips.push({id:data.id,name:file.name,label:'',start:0,end:duration,duration,muted:false,rank:project.clips.length+1});
+      if(!project.ranksLocked) project.clips.forEach((clip,index)=>{clip.rank=project.clips.length-index;});
+      renderRows(); if(project.clips.length===1) loadSelected();
+      $('uploadStatus').textContent=`Added ${file.name}`;
+    } catch(error) { $('uploadStatus').textContent=error.message; }
+  }
+  $('fileInput').value='';
+}
+$('fileInput').addEventListener('change',e=>addFiles([...e.target.files]));
+const drop=$('dropzone');
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover');});
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');addFiles([...e.dataTransfer.files]);});
+$('clipList').addEventListener('click',e=>{
+  const row=e.target.closest('.clip-row'); if(!row || e.target.tagName==='INPUT') return;
+  const i=Number(row.dataset.index), action=e.target.dataset.action;
+  if(e.target.closest('summary')) { openTrimId=project.clips[i].id===openTrimId?null:project.clips[i].id; return; }
+  if(action==='mute'){
+    project.clips[i].muted=!project.clips[i].muted;
+    if(i===selected) main.muted=project.clips[i].muted;
+    renderRows();return;
+  }
+  if(action==='remove'){
+    if(exporting) return;
+    const [removed]=project.clips.splice(i,1);
+    if(project.ranksLocked){[...project.clips].sort((a,b)=>a.rank-b.rank).forEach((clip,index)=>{clip.rank=index+1;});}
+    else project.clips.forEach((clip,index)=>{clip.rank=project.clips.length-index;});
+    select(Math.min(selected,project.clips.length-1));
+    fetch(`/api/media/${encodeURIComponent(removed.id)}`,{method:'DELETE'}).catch(()=>{});
+    return;
+  }
+  if(action==='up'&&i>0){[project.clips[i-1],project.clips[i]]=[project.clips[i],project.clips[i-1]];project.ranksLocked=true;select(i-1);return;}
+  if(action==='down'&&i<project.clips.length-1){[project.clips[i+1],project.clips[i]]=[project.clips[i],project.clips[i+1]];project.ranksLocked=true;select(i+1);return;}
+  select(i);
+});
+$('clipList').addEventListener('change',e=>{
+  const row=e.target.closest('.clip-row'); if(!row) return;
+  const c=project.clips[Number(row.dataset.index)], field=e.target.dataset.field;
+  if(field==='label') c.label=e.target.value;
+  if(field==='start'||field==='end'){
+    const value=Number(e.target.value);
+    if(!Number.isFinite(value) || value<0 || value>c.duration || (field==='start'&&value>=Number(c.end)) || (field==='end'&&value<=Number(c.start))){
+      $('uploadStatus').textContent=`Trim must stay within clip duration (${c.duration.toFixed(1)}s).`; renderRows(); return;
+    }
+    c[field]=value;
+    if(Number(row.dataset.index)===selected) loadSelected();
+  }
+  renderRows();
+});
+$('clipList').addEventListener('input',e=>{if(e.target.dataset.field==='label'){const i=Number(e.target.closest('.clip-row').dataset.index);project.clips[i].label=e.target.value;save();syncText();}});
