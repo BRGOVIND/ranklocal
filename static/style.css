@@ -9,3 +9,12 @@
 .splitter span{display:block;width:4px;height:72px;border-radius:8px;background:#514651;transition:background .2s,height .2s}
 .splitter:hover span,.splitter:focus-visible span,.splitter.dragging span{background:#ff527d;height:105px}
 .splitter:focus-visible{box-shadow:0 0 0 2px #ff527d}
+.style-tools{margin-top:18px;padding:16px;border:1px solid #342d38;border-radius:12px;background:#1b1920}
+.style-heading{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:800;margin-bottom:13px}
+.style-heading span{font-size:10px;font-weight:400;color:#938b9a}
+.style-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.style-grid label{display:flex;flex-direction:column;gap:7px;color:#beb7c4;font-size:11px;font-weight:700}
+.style-grid label span{font-variant-numeric:tabular-nums;color:#938b9a;font-weight:400}
+.style-grid select,.style-grid input[type=color]{width:100%;height:37px;border:1px solid #413947;border-radius:8px;background:#100f14;color:#fff;padding:6px 8px}
+.style-grid input[type=color]{padding:4px;cursor:pointer}
+.style-grid input[type=range]{width:100%;accent-color:#ff527d;margin:7px 0}
