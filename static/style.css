@@ -18,3 +18,19 @@
 .style-grid select,.style-grid input[type=color]{width:100%;height:37px;border:1px solid #413947;border-radius:8px;background:#100f14;color:#fff;padding:6px 8px}
 .style-grid input[type=color]{padding:4px;cursor:pointer}
 .style-grid input[type=range]{width:100%;accent-color:#ff527d;margin:7px 0}
+.section-help{margin-top:6px;color:#918996;font-size:11px;line-height:1.4}
+.clip-fields{display:block;margin-top:12px}
+.clip-fields>label input{margin-top:6px}
+.manual-trim{margin-top:10px;border-top:1px solid #37323b;padding-top:9px;color:#a9a0af}
+.manual-trim summary{cursor:pointer;list-style:none;font-size:11px;font-weight:700;color:#c8bdcc}
+.manual-trim summary::-webkit-details-marker{display:none}
+.manual-trim summary::before{content:'▸';margin-right:7px;color:#ff527d}
+.manual-trim[open] summary::before{content:'▾'}
+.trim-controls{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:10px}
+.trim-controls label{font-size:11px}
+.trim-controls input{font-size:12px;padding:7px 8px}
+.trim-note{font-size:10px;color:#8f8795;margin-top:8px}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid #ff7597;outline-offset:2px}
+button{transition:background .18s,border-color .18s,transform .18s}
+button:active{transform:translateY(1px)}
+@media(max-width:950px){.layout{grid-template-columns:1fr;gap:10px}.splitter{display:none}.editor,.preview-panel{max-height:none;overflow:visible}}
