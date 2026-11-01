@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RankLocal — make ranked Shorts</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon">R<span></span></span><div><strong>RankLocal</strong><small>LOCAL SHORTS STUDIO</small></div></div>
+    <div class="local-note"><span class="live-dot"></span> Runs on your PC · No account</div>
+    <button id="exportBtn" class="primary" disabled>Export MP4 <span>↗</span></button>
+  </header>
+  <main class="layout">
+    <section class="panel editor">
+      <div class="project-actions"><div class="eyebrow">01 / PROJECT</div><button id="newBtn" class="quiet-btn">New video</button></div>
+      <h1>Make a ranking.</h1>
+      <p class="intro">Drop viral moments. Put them in order. Make the Short.</p>
+      <div class="field-grid">
+        <label>Title<input id="titleInput" maxlength="110" placeholder="Top Goals With Most Aura" value="Top Goals With Most Aura"></label>
+        <label>Accent line <span class="hint">optional</span><input id="accentInput" maxlength="40" placeholder="FOOTBALL"></label>
+      </div>
+      <div class="style-tools">
+        <div class="style-heading">Title style <span>Shows in preview and export</span></div>
+        <div class="style-grid">
+          <label>Font<select id="fontInput"><option value="Arial">Arial Bold</option><option value="Impact">Impact</option><option value="Georgia">Georgia Bold</option><option value="Trebuchet">Trebuchet Bold</option><option value="Verdana">Verdana Bold</option></select></label>
+          <label>Title color<input id="titleColorInput" type="color" value="#ffffff"></label>
+          <label>Accent color<input id="accentColorInput" type="color" value="#45b6ff"></label>
+          <label>Size <span id="titleSizeValue">77 px</span><input id="titleSizeInput" type="range" min="60" max="100" value="77"></label>
+        </div>
+      </div>
+      <div class="section-heading"><div><div class="eyebrow">02 / CLIPS</div><h2>Your moments <span id="clipCount">0 / 8</span></h2><p class="section-help">Ranks stay with clips. Drag rows or use arrows for exact playback order.</p><p id="playOrder" class="order-line"></p></div><button id="shuffleBtn" class="shuffle-btn" type="button" disabled>Shuffle order</button></div>
+      <label class="dropzone" id="dropzone">
+        <input id="fileInput" type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v,video/x-matroska,.mkv" multiple hidden>
+        <span class="upload-icon">＋</span><strong>Drop clips here or browse</strong><small>MP4, MOV, WebM, M4V, MKV · up to 8 clips</small>
+      </label>
+      <div id="uploadStatus" class="upload-status" aria-live="polite"></div>
+      <div id="clipList" class="clip-list"></div>
+      <div class="settings">
+        <div class="eyebrow">03 / AUDIO</div>
+        <p>Each clip has its own sound switch. Add one audio file across the whole video.</p>
+        <label class="audio-upload" for="audioFileInput"><input id="audioFileInput" type="file" accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac" hidden>＋ Add audio file</label>
+        <div id="musicControls" class="music-controls" hidden>
+          <div class="music-head"><strong id="musicName"></strong><button id="removeMusicBtn" class="quiet-btn" type="button">Remove</button></div>
+          <label class="music-volume">Audio volume <span id="musicVolumeValue">30%</span><input id="musicVolumeInput" type="range" min="0" max="100" value="30"></label>
+          <small>Loops to match video length. Original clip sound stays on unless you mute that clip.</small>
+        </div>
+        <div id="audioStatus" class="upload-status" aria-live="polite"></div>
+      </div>
+    </section>
+    <div id="splitter" class="splitter" role="separator" aria-label="Resize editor and preview" aria-orientation="vertical" tabindex="0"><span></span></div>
+    <section class="panel preview-panel">
+      <div class="preview-head"><div><div class="eyebrow">LIVE PREVIEW</div><h2>What viewers see</h2></div><span class="resolution">9:16 · 1080 × 1920</span></div>
+      <div class="preview-wrap"><div id="preview" class="preview">
+        <video id="bgVideo" class="bg-video" muted playsinline></video>
+        <video id="mainVideo" class="main-video" playsinline></video>
+        <audio id="musicAudio" preload="metadata" loop></audio>
+        <div class="preview-title" id="previewTitle">Top Goals With Most Aura</div>
+        <div class="preview-accent" id="previewAccent"></div>
+        <div class="preview-ranks" id="previewRanks"></div>
+        <div class="empty-preview" id="emptyPreview"><div class="empty-icon">▶</div><strong>Your Short starts here</strong><span>Add clips to see your ranking.</span></div>
+      </div></div>
+      <div class="transport"><button id="playBtn" class="play" disabled aria-label="Play or pause">▶</button><div class="transport-info"><strong id="nowPlaying">No clips yet</strong><span id="timeInfo">0:00 / 0:00</span></div><span class="preview-tag">PREVIEW</span></div>
+      <div class="export-area"><div><strong>Ready for daily posts</strong><p>One click creates vertical H.264 MP4. Files stay on this PC.</p></div><div id="exportStatus" role="status"></div></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
