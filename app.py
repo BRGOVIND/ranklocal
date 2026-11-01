@@ -208,3 +208,33 @@ def render(job_id, project):
         work.rmdir()
 
 
+def validate_project(project):
+    if not isinstance(project, dict) or not isinstance(project.get("clips"), list):
+        raise ValueError("Invalid project")
+    if not 1 <= len(project["clips"]) <= 8:
+        raise ValueError("Add 1–8 clips")
+    ranks = [int(clip.get("rank", len(project["clips"]) - index))
+             for index, clip in enumerate(project["clips"])]
+    if sorted(ranks) != list(range(1, len(ranks) + 1)):
+        raise ValueError("Ranks must be unique numbers from 1 to clip count")
+    for clip in project["clips"]:
+        ident = str(clip.get("id", ""))
+        if not valid_media_name(ident):
+            raise ValueError("Invalid clip")
+        if not (UPLOADS / ident).is_file():
+            raise ValueError("Clip file missing. Upload it again")
+        start, end = float(clip["start"]), float(clip["end"])
+        if start < 0 or end <= start:
+            raise ValueError("Each clip needs a valid start and end")
+        if end > probe_duration(UPLOADS / ident) + 0.1:
+            raise ValueError("Trim exceeds source clip length")
+    music = project.get("music")
+    if music:
+        name = music.get("id", "")
+        if not valid_audio_name(name) or not (AUDIO / name).is_file():
+            raise ValueError("Audio file missing. Add it again")
+        volume = float(music.get("volume", 0.3))
+        if not 0 <= volume <= 1:
+            raise ValueError("Audio volume must be 0–100%")
+
+
